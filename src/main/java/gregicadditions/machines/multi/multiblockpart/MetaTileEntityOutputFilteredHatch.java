@@ -12,8 +12,11 @@ import gregtech.api.metatileentity.MetaTileEntity;
 import gregtech.api.metatileentity.MetaTileEntityHolder;
 import gregtech.api.metatileentity.multiblock.IMultiblockAbilityPart;
 import gregtech.api.metatileentity.multiblock.MultiblockAbility;
+import gregtech.api.metatileentity.multiblock.MultiblockControllerBase;
 import gregtech.api.render.SimpleOverlayRenderer;
 import gregtech.api.render.Textures;
+import gregtech.api.util.world.DirtyableFluidTank;
+import gregtech.api.util.world.DirtyableItemStackHandler;
 import gregtech.common.covers.filter.FilterTypeRegistry;
 import gregtech.common.covers.filter.FluidFilter;
 import gregtech.common.covers.filter.SimpleFluidFilter;
@@ -148,7 +151,7 @@ public class MetaTileEntityOutputFilteredHatch extends GAMetaTileEntityMultibloc
 
     @Override
     protected FluidTankList createExportFluidHandler() {
-        return new FluidTankList(false, new FluidTank(getInventorySize()) {
+        return new FluidTankList(false, new DirtyableFluidTank(getInventorySize(),getController(),true) {
             @Override
             public boolean canFill() {
                 return super.canFill();
@@ -177,6 +180,14 @@ public class MetaTileEntityOutputFilteredHatch extends GAMetaTileEntityMultibloc
     @Override
     public void registerAbilities(List<IFluidTank> abilityList) {
         abilityList.addAll(this.exportFluids.getFluidTanks());
+    }
+
+    @Override
+    protected void updateDirtyableHandlers(MultiblockControllerBase multiblockControllerBase) {
+        DirtyableFluidTank handler;
+        handler = (DirtyableFluidTank) getExportFluids().getFluidTanks().get(0);
+        handler.setEntityToSetDirty(multiblockControllerBase);
+        handler.dirtyEntity();
     }
 
     @Override

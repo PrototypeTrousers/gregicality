@@ -264,24 +264,31 @@ abstract public class LargeSimpleRecipeMapMultiblockController extends GARecipeM
             Recipe currentRecipe = null;
             IItemHandlerModifiable importInventory = getInputInventory();
             IMultipleTankHandler importFluids = getInputTank();
-            boolean dirty = checkRecipeInputsDirty(importInventory, importFluids);
+
             //inverse of logic in normal AbstractRecipeLogic
             //for MultiSmelter, we can reuse previous recipe if inputs didn't change
             //otherwise, we need to recompute it for new ingredients
             //but technically, it means we can cache multi smelter recipe, but changing inputs have more priority
-            if (dirty || forceRecipeRecheck) {
+            if (metaTileEntity.isInputsDirty()) {
                 this.forceRecipeRecheck = false;
-                //else, try searching new recipe for given inputs
+                //Inputs changed, try searching new recipe for given inputs
                 currentRecipe = findRecipe(maxVoltage, importInventory, importFluids);
-                if (currentRecipe != null) {
-                    this.previousRecipe = currentRecipe;
-                }
             } else if (previousRecipe != null && previousRecipe.matches(false, importInventory, importFluids)) {
                 //if previous recipe still matches inputs, try to use it
                 currentRecipe = previousRecipe;
+            } else {
+                currentRecipe = findRecipe(maxVoltage, importInventory, importFluids);
             }
+            // If a recipe was found, then inputs were valid.
+            if (!(this.invalidInputsForRecipes = currentRecipe == null))
+                // replace old recipe with new one
+                this.previousRecipe = currentRecipe;
+
+            // proceed if we have a usable recipe.
             if (currentRecipe != null && setupAndConsumeRecipeInputs(currentRecipe)) {
                 setupRecipe(currentRecipe);
+                //avoid new recipe lookup caused by item consumption from input
+                metaTileEntity.setInputsDirty(false);
             }
         }
 
@@ -347,8 +354,10 @@ abstract public class LargeSimpleRecipeMapMultiblockController extends GARecipeM
             // determine if there is enough room in the output to fit all of this
             boolean canFitOutputs = InventoryUtils.simulateItemStackMerge(outputI, this.getOutputInventory());
             // if there isn't, we can't process this recipe.
-            if (!canFitOutputs)
+            if (!canFitOutputs) {
+                this.isOutputsFull = true;
                 return null;
+            }
 
 
             RecipeBuilder<?> newRecipe = recipeMap.recipeBuilder()

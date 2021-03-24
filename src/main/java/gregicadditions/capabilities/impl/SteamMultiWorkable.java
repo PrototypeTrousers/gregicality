@@ -32,21 +32,32 @@ public class SteamMultiWorkable extends SteamMultiblockRecipeLogic {
         long maxVoltage = getMaxVoltage(); // Will always be LV voltage
         Recipe currentRecipe = null;
         IItemHandlerModifiable importInventory = getInputInventory();
-        boolean dirty = checkRecipeInputsDirty(importInventory, null);
+        IMultipleTankHandler importFluids = getInputTank();
 
-        if(dirty || forceRecipeRecheck) {
+        //inverse of logic in normal AbstractRecipeLogic
+        //for MultiSmelter, we can reuse previous recipe if inputs didn't change
+        //otherwise, we need to recompute it for new ingredients
+        //but technically, it means we can cache multi smelter recipe, but changing inputs have more priority
+        if (metaTileEntity.isInputsDirty()) {
             this.forceRecipeRecheck = false;
-
-            currentRecipe = findRecipe(maxVoltage, importInventory, null);
-            if (currentRecipe != null) {
-                this.previousRecipe = currentRecipe;
-            }
-        } else if (previousRecipe != null && previousRecipe.matches(false, importInventory, new FluidTankList(false))) {
+            //Inputs changed, try searching new recipe for given inputs
+            currentRecipe = findRecipe(maxVoltage, importInventory, importFluids);
+        } else if (previousRecipe != null && previousRecipe.matches(false, importInventory, importFluids)) {
+            //if previous recipe still matches inputs, try to use it
             currentRecipe = previousRecipe;
+        } else {
+            currentRecipe = findRecipe(maxVoltage, importInventory, importFluids);
         }
+        // If a recipe was found, then inputs were valid.
+        if (!(this.invalidInputsForRecipes = currentRecipe == null))
+            // replace old recipe with new one
+            this.previousRecipe = currentRecipe;
 
+        // proceed if we have a usable recipe.
         if (currentRecipe != null && setupAndConsumeRecipeInputs(currentRecipe)) {
             setupRecipe(currentRecipe);
+            //avoid new recipe lookup caused by item consumption from input
+            metaTileEntity.setInputsDirty(false);
         }
     }
 
@@ -62,6 +73,7 @@ public class SteamMultiWorkable extends SteamMultiblockRecipeLogic {
         /* Iterate over input items looking for more items to process until we
          * have touched every item, or are at maximum item capacity
          */
+        boolean matchedRecipe = false;
         for (int index = 0; index < inputs.getSlots() && currentItemsEngaged < MAX_PROCESSES; index ++) {
             final ItemStack currentInputItem = inputs.getStackInSlot(index);
 
@@ -75,6 +87,7 @@ public class SteamMultiWorkable extends SteamMultiblockRecipeLogic {
                     Collections.emptyList(), 0);
             CountableIngredient inputIngredient;
             if (matchingRecipe != null) {
+                matchedRecipe = true;
                 inputIngredient = matchingRecipe.getInputs().get(0);
                 recipeEUt = matchingRecipe.getEUt();
                 recipeDuration = matchingRecipe.getDuration();
@@ -116,8 +129,11 @@ public class SteamMultiWorkable extends SteamMultiblockRecipeLogic {
         }
 
         // No recipe was found
-        if (recipeInputs.isEmpty()) {
-            forceRecipeRecheck = true;
+        if(recipeInputs.isEmpty() && matchedRecipe) {
+            //Set here to prevent recipe deadlock on world load with full output bus
+            this.isOutputsFull = true;
+            return null;
+        } else if (recipeInputs.isEmpty()) {
             return null;
         }
 

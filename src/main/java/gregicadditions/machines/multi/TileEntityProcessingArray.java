@@ -399,21 +399,30 @@ public class TileEntityProcessingArray extends RecipeMapMultiblockWithSlotContro
             IItemHandlerModifiable importInventory = getInputInventory();
             IMultipleTankHandler importFluids = getInputTank();
 
-            boolean dirty = checkRecipeInputsDirty(importInventory, importFluids);
-            if (dirty || forceRecipeRecheck) {
+            // see if the last recipe we used still works
+            if (metaTileEntity.isInputsDirty()) {
                 this.forceRecipeRecheck = false;
-
-                // else, try searching new recipe for given inputs
+                //Inputs changed, try searching new recipe for given inputs
                 currentRecipe = findRecipe(maxVoltage, importInventory, importFluids);
-                if (currentRecipe != null) {
-                    this.previousRecipe = currentRecipe;
-                }
             } else if (previousRecipe != null && previousRecipe.matches(false, importInventory, importFluids)) {
-                // if previous recipe still matches inputs, try to use it
+                //if previous recipe still matches inputs, try to use it
                 currentRecipe = previousRecipe;
+            } else {
+                currentRecipe = findRecipe(maxVoltage, importInventory, importFluids);
             }
+
+            // If a recipe was found, then inputs were valid.
+            // recipe multiplying machines may not be able to fit
+            // the multiplied recipes. in that case the inputs are valid
+            if (!(this.invalidInputsForRecipes = (currentRecipe == null && !this.isOutputsFull)))
+                // replace old recipe with new one
+                this.previousRecipe = currentRecipe;
+
+            // proceed if we have a usable recipe.
             if (currentRecipe != null && setupAndConsumeRecipeInputs(currentRecipe)) {
                 setupRecipe(currentRecipe);
+                //avoid new recipe lookup caused by item consumption from input
+                metaTileEntity.setInputsDirty(false);
             }
         }
 
